@@ -2,7 +2,7 @@
 
 Open BioLogic EC-Lab `.mpr` files in the browser, plot them by cycle and export the data as CSV, tab-separated TXT (for Origin) or Excel.
 
-**Live demo:** _add your Vercel URL here_
+**Live demo:** _coming soon (Vercel)_ · **Source:** https://github.com/Avivbryg/mpr-converter
 
 ![screenshot](docs/screenshot.png)
 
