@@ -17,6 +17,7 @@ const PY_FILES = {
 };
 const PY_DIR = "/home/pyodide/app";
 const UPLOAD_PATH = "/tmp/upload.mpr";
+const AUTO_PATH = "/tmp/auto.mpr"; // folder auto-convert, kept apart from the viewer's file
 
 let py = null;
 let core = null;
@@ -76,6 +77,12 @@ const commands = {
 
   preview() {
     return toJs(core.preview(50));
+  },
+
+  convert({ bytes, name, format, split }) {
+    py.FS.writeFile(AUTO_PATH, new Uint8Array(bytes));
+    const fmt = format === "xlsx" ? "csv" : format;
+    return toJs(core.convert(AUTO_PATH, name, fmt, split));
   },
 
   export({ columns, groupCol, selected, format, split }) {

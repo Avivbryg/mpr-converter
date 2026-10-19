@@ -103,12 +103,23 @@ def guess_technique(names):
     return "Unknown", "time/s", ewe or current
 
 
+def _group_options(cols):
+    """Columns that can split the data into cycles, best first."""
+    return [c for c in ("cycle number", DERIVED_CYCLE, "half cycle", "Ns")
+            if c in cols]
+
+
+def _ordered(cols):
+    """Column names with the usual ones (time, potential, current...) first."""
+    return [c for c in PREFERRED_ORDER if c in cols] + \
+           [c for c in cols if c not in PREFERRED_ORDER]
+
+
 def load(path, filename=None):
     """Load a file and return a summary dict for the UI."""
     cols, mpr = _read_mpr(path)
     names = list(cols)
-    ordered = [c for c in PREFERRED_ORDER if c in cols] + \
-              [c for c in names if c not in PREFERRED_ORDER]
+    ordered = _ordered(cols)
 
     technique, dx, dy = guess_technique(names)
     if dx not in cols:
@@ -116,8 +127,7 @@ def load(path, filename=None):
     if dy not in cols:
         dy = ordered[1] if len(ordered) > 1 else ordered[0]
 
-    group_options = [c for c in ("cycle number", DERIVED_CYCLE, "half cycle", "Ns")
-                     if c in cols]
+    group_options = _group_options(cols)
     default_group = group_options[0] if group_options else NO_GROUP
     group_options.append(NO_GROUP)
 
@@ -149,8 +159,7 @@ def groups(group_col):
 
 # ----------------------------------------------------------- selection ---
 
-def _mask(group_col, selected):
-    cols = _STATE["cols"]
+def _mask(cols, group_col, selected):
     n = len(next(iter(cols.values())))
     if group_col == NO_GROUP or group_col not in cols or not selected:
         return np.ones(n, dtype=bool)
@@ -203,8 +212,7 @@ FORMATS = {
 }
 
 
-def _to_text(columns, mask, delimiter):
-    cols = _STATE["cols"]
+def _to_text(cols, columns, mask, delimiter):
     arrays = [cols[c][mask] for c in columns]
     # integers as integers; float32 columns get 7 significant digits so
     # 0.1833 isn't written as 0.1832999954 (float32 -> float64 noise)
@@ -226,23 +234,40 @@ def export(columns, group_col, selected, fmt="csv", split=False):
     split=True  -> one file per selected group (per all groups if none).
     For 'xlsx' the JavaScript side converts these CSV texts into sheets.
     """
-    cols = _STATE["cols"]
+    return _files(_STATE["cols"], _STATE["filename"], columns, group_col,
+                  selected, fmt, split)
+
+
+def convert(path, filename=None, fmt="csv", split=False):
+    """Convert a whole file in one go, for the folder auto-convert.
+
+    All columns, split by the file's default cycle column. Does not touch
+    the file open in the viewer (_STATE). Returns the same list as export().
+    """
+    cols, _ = _read_mpr(path)
+    options = _group_options(cols)
+    group_col = options[0] if options else NO_GROUP
+    return _files(cols, filename or os.path.basename(path), _ordered(cols),
+                  group_col, [], fmt, split)
+
+
+def _files(cols, filename, columns, group_col, selected, fmt, split):
     columns = [c for c in columns if c in cols] or list(cols)
     delimiter, ext = FORMATS.get(fmt, FORMATS["csv"])
-    base = os.path.splitext(_STATE["filename"])[0]
+    base = os.path.splitext(filename)[0]
 
     can_split = group_col != NO_GROUP and group_col in cols
     if split and can_split:
-        chosen = selected or groups(group_col)
+        chosen = selected or [int(v) for v in np.unique(cols[group_col])]
         label = "cycle" if "cycle" in group_col else group_col.replace(" ", "-")
         return [{
             "name": f"{base}_{label}-{int(g)}.{ext}",
             "sheet": f"{label} {int(g)}",
-            "text": _to_text(columns, cols[group_col] == int(g), delimiter),
+            "text": _to_text(cols, columns, cols[group_col] == int(g), delimiter),
         } for g in chosen]
 
     return [{
         "name": f"{base}.{ext}",
         "sheet": "data",
-        "text": _to_text(columns, _mask(group_col, selected), delimiter),
+        "text": _to_text(cols, columns, _mask(cols, group_col, selected), delimiter),
     }]

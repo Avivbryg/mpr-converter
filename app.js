@@ -15,7 +15,7 @@ worker.onmessage = ({ data }) => {
   data.ok ? p.resolve(data.result) : p.reject(new Error(data.error));
 };
 
-function call(cmd, args, transfer = []) {
+export function call(cmd, args, transfer = []) {
   const id = nextId++;
   return new Promise((resolve, reject) => {
     pending.set(id, { resolve, reject });
@@ -85,14 +85,14 @@ async function openFile(file) {
   await showFile();
 }
 
-function waitForEngine() {
+export function waitForEngine() {
   return new Promise((resolve) => {
     const tick = () => (state.ready ? resolve() : setTimeout(tick, 150));
     tick();
   });
 }
 
-function friendlyError(msg, name) {
+export function friendlyError(msg, name) {
   if (/Invalid magic/i.test(msg)) return `${name} doesn't look like an EC-Lab .mpr file (the file header is not what BioLogic writes).`;
   if (/Unrecognised version|unknown column/i.test(msg)) return `${name} uses a format version this reader doesn't know yet. Details: ${msg}`;
   return `${name} could not be read. Details: ${msg}`;
@@ -346,12 +346,7 @@ async function download() {
 
     const base = state.info.filename.replace(/\.mpr$/i, "");
     if (format === "xlsx") {
-      const wb = XLSX.utils.book_new();
-      for (const f of files) {
-        const sheet = XLSX.read(f.text, { type: "string", raw: false }).Sheets.Sheet1;
-        XLSX.utils.book_append_sheet(wb, sheet, f.sheet.slice(0, 31));
-      }
-      XLSX.writeFile(wb, `${base}.xlsx`, { compression: true });
+      save(buildXlsx(files), `${base}.xlsx`);
     } else if (files.length === 1) {
       save(new Blob([files[0].text], { type: "text/plain;charset=utf-8" }), files[0].name);
     } else {
@@ -367,6 +362,17 @@ async function download() {
     btn.disabled = false;
     setTimeout(() => (btn.textContent = "Download"), 1600);
   }
+}
+
+// One workbook from core's CSV texts: one sheet per file.
+export function buildXlsx(files) {
+  const wb = XLSX.utils.book_new();
+  for (const f of files) {
+    const sheet = XLSX.read(f.text, { type: "string", raw: false }).Sheets.Sheet1;
+    XLSX.utils.book_append_sheet(wb, sheet, f.sheet.slice(0, 31));
+  }
+  const data = XLSX.write(wb, { bookType: "xlsx", type: "array", compression: true });
+  return new Blob([data], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
 }
 
 function save(blob, name) {

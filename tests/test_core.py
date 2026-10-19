@@ -66,6 +66,26 @@ def test_export_split_per_cycle():
     assert "\t" in files[0]["text"].splitlines()[0]
 
 
+def test_convert_leaves_viewer_state_alone():
+    core.load(sample("CV_C01.mpr"))
+    files = core.convert(sample("020-formation_CB5.mpr"), fmt="csv", split=True)
+    assert [f["name"] for f in files] == [
+        "020-formation_CB5_cycle-1.csv", "020-formation_CB5_cycle-2.csv"]
+    assert core._STATE["filename"] == "CV_C01.mpr"   # viewer still has its file
+    assert core.groups("cycle number") == [1, 2, 3]
+
+
+def test_convert_whole_file_without_cycles():
+    files = core.convert(sample("121_CA_455nm_6V_30min_C01.mpr"), fmt="tsv")
+    assert [f["name"] for f in files] == ["121_CA_455nm_6V_30min_C01.txt"]
+    assert len(files[0]["text"].splitlines()) - 1 == 1804
+    # same column order as the viewer's export
+    header = files[0]["text"].splitlines()[0].split("\t")
+    info = core.load(sample("121_CA_455nm_6V_30min_C01.mpr"))
+    assert header == info["columns"]
+    assert header[:3] == ["time/s", "Ewe/V", "I/mA"]
+
+
 def test_series_downsampling():
     core.load(sample("CV_C01.mpr"))
     traces = core.series("Ewe/V", "<I>/mA", "cycle number", [1, 3], max_points=500)

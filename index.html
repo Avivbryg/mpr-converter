@@ -127,6 +127,54 @@
     </details>
   </main>
 
+  <section class="auto" id="auto" aria-labelledby="auto-title">
+    <div class="auto-intro">
+      <h2 id="auto-title">Auto-convert a folder</h2>
+      <p class="hint">Pick the folder your <code>.mpr</code> files land in and where the converted files should go.
+        Subfolders are included and mirrored in the destination. While this tab is open, new and updated files
+        are converted every few seconds. Files never leave this computer.</p>
+    </div>
+
+    <p class="auto-unsupported" id="auto-unsupported" hidden>Folder access needs Chrome or Edge on a computer.
+      In this browser you can still open and export files one at a time above.</p>
+
+    <div class="auto-body" id="auto-body">
+      <div class="auto-folders">
+        <div class="auto-folder">
+          <span class="auto-label">Source folder</span>
+          <button type="button" class="secondary" id="auto-src">Choose folder…</button>
+          <code class="auto-path" id="auto-src-name">not chosen</code>
+        </div>
+        <div class="auto-folder">
+          <span class="auto-label">Destination folder</span>
+          <button type="button" class="secondary" id="auto-dst" disabled>Choose folder…</button>
+          <label class="check"><input type="checkbox" id="auto-same" checked> <span>Same as source</span></label>
+          <code class="auto-path" id="auto-dst-name">same as source</code>
+        </div>
+      </div>
+
+      <div class="auto-options">
+        <label class="field">Format
+          <select id="auto-format">
+            <option value="csv">CSV (comma separated)</option>
+            <option value="tsv">TXT (tab separated, for Origin)</option>
+            <option value="xlsx">Excel workbook (.xlsx)</option>
+          </select>
+        </label>
+        <label class="check"><input type="checkbox" id="auto-split"> <span>One file per cycle</span></label>
+        <p class="hint" id="auto-split-hint"></p>
+      </div>
+
+      <div class="auto-actions">
+        <button type="button" class="primary" id="auto-toggle" disabled>Start watching</button>
+        <button type="button" class="secondary" id="auto-check" disabled>Check for new files now</button>
+        <p class="engine" id="auto-status" role="status" aria-live="polite"></p>
+      </div>
+
+      <ol class="auto-log" id="auto-log" aria-label="Conversion log"></ol>
+    </div>
+  </section>
+
   <footer class="colophon">
     <p>Reads files with <a href="https://github.com/echemdata/galvani">galvani</a> running on
       <a href="https://pyodide.org">Pyodide</a>. Technique detection is a best guess from the columns in the file.
@@ -137,5 +185,6 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" defer></script>
   <script type="module" src="app.js"></script>
+  <script type="module" src="folder.js"></script>
 </body>
 </html>
