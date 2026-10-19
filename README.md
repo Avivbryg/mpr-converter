@@ -34,12 +34,27 @@ browser tab
 1. Open the folder in VS Code and install the recommended extensions (Live Server, Python).
 2. Right-click `index.html` and choose **Open with Live Server**.
    The page must be served over http(s); opening the file directly (`file://`) blocks the Web Worker.
-3. Test the Python logic without a browser:
 
-   ```bash
-   pip install numpy pytest
-   pytest tests/
-   ```
+## Running the tests
+
+```bash
+# Python logic (py/core.py), no browser
+pip install numpy pytest
+pytest tests/
+
+# Browser tests (Playwright + Chromium), from the tests folder
+cd tests
+npm install          # first time: installs Playwright and Chromium
+npm test             # all suites: viewer, themes, auto-convert
+npm test -- themes   # one suite
+npm run screenshot   # viewer suite, also refreshes docs/screenshot.png
+```
+
+- `npm test` serves the site itself on a free port, so nothing else has to be running. Pyodide, Plotly, SheetJS and JSZip come from their CDNs, so it needs internet.
+- The suites live in `tests/e2e/`; screenshots and downloads from the last run go to `tests/e2e/output/` (not committed).
+- The auto-convert suite can't click a real folder picker, so it swaps it for the browser's private file system, which has the same API.
+- `tests/fixtures/CV_running.mpr` is a sample without its `VMP LOG` module, standing in for a running experiment (see `tests/fixtures/README.md`).
+- `package.json` sits in `tests/` rather than the root so Vercel keeps treating the site as plain static files, with no install or build step.
 
 ## Deploy to Vercel
 

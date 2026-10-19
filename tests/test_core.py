@@ -131,6 +131,15 @@ def test_running_experiment_without_log_module(tmp_path):
     assert [f["name"] for f in partial["files"]] == ["running.csv"]
 
 
+def test_running_fixture_is_up_to_date(tmp_path):
+    """tests/fixtures/CV_running.mpr (used by the browser tests) is exactly
+    CV_C01.mpr without its LOG module."""
+    fixture = os.path.join(ROOT, "tests", "fixtures", "CV_running.mpr")
+    fresh = strip_log_module(sample("CV_C01.mpr"), str(tmp_path / "fresh.mpr"))
+    with open(fixture, "rb") as a, open(fresh, "rb") as b:
+        assert a.read() == b.read()
+
+
 def test_series_downsampling():
     core.load(sample("CV_C01.mpr"))
     traces = core.series("Ewe/V", "<I>/mA", "cycle number", [1, 3], max_points=500)
