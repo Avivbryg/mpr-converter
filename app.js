@@ -33,7 +33,10 @@ const state = {
   groups: [],          // e.g. [1, 2, 3]
   selected: new Set(), // selected group values
   columns: new Set(),  // columns to export
+  file: 0,             // bumped on every open; replies for an older file are dropped
 };
+// True when another file was opened while we were waiting on the worker.
+const stale = (file) => file !== state.file;
 
 // ---------------------------------------------------------------- engine ---
 
@@ -58,17 +61,26 @@ async function openFile(file) {
   if (!/\.mpr$/i.test(file.name)) {
     return showError(`${file.name} is not an .mpr file. Export from EC-Lab as .mpr, or drop the .mpr from the experiment folder.`);
   }
+  const gen = ++state.file;
   if (!state.ready) setEngine("Opening the file as soon as the engine is ready…");
   await waitForEngine();
 
   setEngine(`Reading ${file.name}…`);
+  let info;
   try {
     const bytes = await file.arrayBuffer();
-    state.info = await call("load", { bytes, name: file.name }, [bytes]);
+    info = await call("load", { bytes, name: file.name }, [bytes]);
   } catch (err) {
+    if (stale(gen)) return;
     setEngine("Ready. Your files stay on this computer.", "ready");
+    // back to the drop area, where the error is shown next to "Choose a file"
+    state.info = null;
+    $("panel").hidden = true;
+    $("preview").hidden = true;
     return showError(friendlyError(err.message, file.name));
   }
+  if (stale(gen)) return;
+  state.info = info;
   setEngine("Ready. Your files stay on this computer.", "ready");
   await showFile();
 }
@@ -120,7 +132,9 @@ async function showFile() {
 
   state.columns = new Set(info.columns);
   renderColumnList();
+  const gen = state.file;
   await loadGroups();
+  if (stale(gen)) return;
   await renderPreview();
 }
 
@@ -140,7 +154,10 @@ function groupLabel(v) {
 
 async function loadGroups() {
   const groupCol = $("group-col").value;
-  state.groups = groupCol === NO_GROUP ? [] : await call("groups", { groupCol });
+  const gen = state.file;
+  const groups = groupCol === NO_GROUP ? [] : await call("groups", { groupCol });
+  if (stale(gen)) return;
+  state.groups = groups;
   // Show every cycle by default; for long experiments start with first and last
   state.selected = new Set(
     state.groups.length <= 12 ? state.groups : [state.groups[0], state.groups.at(-1)]
@@ -224,6 +241,7 @@ let plotToken = 0;
 async function renderPlot() {
   if (!state.info || !window.Plotly) return;
   const token = ++plotToken; // ignore results from older, slower requests
+  const gen = state.file;
   const x = $("x-col").value;
   const y = $("y-col").value;
   const groupCol = $("group-col").value;
@@ -233,9 +251,11 @@ async function renderPlot() {
   try {
     traces = await call("series", { x, y, groupCol, selected });
   } catch (err) {
+    // a request for a file that has since been replaced fails harmlessly
+    if (token !== plotToken || stale(gen)) return;
     return showError(`Could not plot ${y} against ${x}: ${err.message}`);
   }
-  if (token !== plotToken) return;
+  if (token !== plotToken || stale(gen)) return;
 
   const ink = cssVar("--ink");
   const grid = cssVar("--grid-major");
@@ -360,7 +380,9 @@ function save(blob, name) {
 // --------------------------------------------------------------- preview ---
 
 async function renderPreview() {
+  const gen = state.file;
   const { columns, rows } = await call("preview");
+  if (stale(gen)) return;
   const thead = document.createElement("thead");
   const hr = thead.insertRow();
   columns.forEach((c) => {
@@ -378,7 +400,11 @@ async function renderPreview() {
 
 // ---------------------------------------------------------------- events ---
 
-$("file-input").addEventListener("change", (e) => openFile(e.target.files[0]));
+$("file-input").addEventListener("change", (e) => {
+  openFile(e.target.files[0]);
+  e.target.value = ""; // so picking the same file again still fires "change"
+});
+$("open-another").addEventListener("click", () => $("file-input").click());
 document.querySelectorAll("[data-sample]").forEach((b) =>
   b.addEventListener("click", () => openSample(b.dataset.sample))
 );
@@ -430,5 +456,29 @@ window.addEventListener("drop", (e) => {
   openFile(e.dataTransfer.files[0]);
 });
 
-// Redraw with the right colors when the system switches light/dark
+// ----------------------------------------------------------------- theme ---
+// index.html applies the saved theme before the first paint; this keeps the
+// picker in sync and redraws the plot in the new colors.
+
+const themeInputs = document.querySelectorAll('input[name="theme"]');
+const currentTheme = document.documentElement.dataset.theme || "auto";
+themeInputs.forEach((input) => {
+  input.checked = input.value === currentTheme;
+  input.addEventListener("change", () => {
+    if (input.value === "auto") delete document.documentElement.dataset.theme;
+    else document.documentElement.dataset.theme = input.value;
+    try {
+      localStorage.setItem("theme", input.value);
+    } catch {}
+    renderPlot();
+  });
+});
+
+// Plotly's "responsive" only follows window resizes. This also catches the
+// plot box changing size on its own, e.g. being shown again after an error.
+new ResizeObserver(() => {
+  if (window.Plotly && $("plot").data && !$("plot").hidden) Plotly.Plots.resize("plot");
+}).observe($("plot"));
+
+// In Auto, redraw with the right colors when the system switches light/dark
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", renderPlot);

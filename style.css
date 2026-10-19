@@ -1,6 +1,12 @@
 /* MPR Converter - lab-notebook graph paper, ink-blue pen. */
 
-:root {
+/* ------------------------------------------------------------- themes
+   Day is the default. "Auto" (no data-theme) follows the system and uses
+   Night when it is dark. The theme blocks are not tied to :root, so the
+   swatches in the theme picker can preview them with their own data-theme. */
+
+:root,
+[data-theme="day"] {
   --paper: #eef3f1;        /* engineering paper */
   --grid: #dde7e2;         /* minor grid line */
   --grid-major: #c9d8d0;   /* major grid line, also plot gridlines */
@@ -9,22 +15,70 @@
   --ink-soft: #5a6878;
   --accent: #2a49c9;       /* cobalt ink: actions and single traces */
   --accent-wash: #e3e9fb;
+  --on-accent: #ffffff;
   --danger: #a3271f;
+  --ok: #2f9e6a;
   --ramp-start: #9bb4f5;   /* first cycle */
   --ramp-end: #0f1f66;     /* last cycle */
-
-  --sans: "Schibsted Grotesk", system-ui, sans-serif;
-  --mono: "IBM Plex Mono", ui-monospace, monospace;
-  --step--1: 0.8125rem;
-  --step-0: 1rem;
-  --step-1: 1.25rem;
-  --step-3: 2.441rem;
-  --radius: 6px;
   color-scheme: light;
 }
 
+/* Sepia: warm notebook paper and sienna ink, less glare than Day */
+[data-theme="sepia"] {
+  --paper: #f1e8d8;
+  --grid: #e7dcc8;
+  --grid-major: #d8c8ab;
+  --surface: #fbf6ed;
+  --ink: #33251a;
+  --ink-soft: #6c5844;
+  --accent: #a8431b;
+  --accent-wash: #f4e0cf;
+  --on-accent: #ffffff;
+  --danger: #9b1c1c;
+  --ok: #2f7d4f;
+  --ramp-start: #e3a47c;
+  --ramp-end: #4f1a06;
+  color-scheme: light;
+}
+
+/* Dusk: soft slate with amber ink, between day and night */
+[data-theme="dusk"] {
+  --paper: #2a2e3b;
+  --grid: #313646;
+  --grid-major: #3d4355;
+  --surface: #323748;
+  --ink: #e8e5f0;
+  --ink-soft: #aaa7bd;
+  --accent: #f0a85e;
+  --accent-wash: #4a3e37;
+  --on-accent: #2a2e3b;
+  --danger: #ff9d92;
+  --ok: #6fd39e;
+  --ramp-start: #9a5c39;
+  --ramp-end: #ffd8a6;
+  color-scheme: dark;
+}
+
+/* Night: deep blue-black, for dark rooms */
+[data-theme="night"] {
+  --paper: #0e171d;
+  --grid: #15222a;
+  --grid-major: #213239;
+  --surface: #121e25;
+  --ink: #e2eaee;
+  --ink-soft: #93a4ae;
+  --accent: #8ea5ff;
+  --accent-wash: #1c2a52;
+  --on-accent: #0e171d;
+  --danger: #ff8a7f;
+  --ok: #3fb27f;
+  --ramp-start: #3f5bb8;
+  --ramp-end: #c9d6ff;
+  color-scheme: dark;
+}
+
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
+  :root:not([data-theme]) {
     --paper: #0e171d;
     --grid: #15222a;
     --grid-major: #213239;
@@ -33,11 +87,23 @@
     --ink-soft: #93a4ae;
     --accent: #8ea5ff;
     --accent-wash: #1c2a52;
+    --on-accent: #0e171d;
     --danger: #ff8a7f;
+    --ok: #3fb27f;
     --ramp-start: #3f5bb8;
     --ramp-end: #c9d6ff;
     color-scheme: dark;
   }
+}
+
+:root {
+  --sans: "Schibsted Grotesk", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, monospace;
+  --step--1: 0.8125rem;
+  --step-0: 1rem;
+  --step-1: 1.25rem;
+  --step-3: 2.441rem;
+  --radius: 6px;
 }
 
 * { box-sizing: border-box; }
@@ -74,6 +140,66 @@ a { color: var(--accent); }
   padding: 2.5rem 1rem 1.25rem;
 }
 
+.masthead-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1.5rem;
+}
+
+/* Theme picker: a segmented control of radio buttons with color swatches */
+.themes {
+  display: flex;
+  margin: 0;
+  padding: 3px;
+  border: 1px solid var(--grid-major);
+  border-radius: 999px;
+  background: var(--surface);
+}
+.themes legend {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.themes label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  font-size: var(--step--1);
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.themes input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.themes label:has(input:checked) {
+  color: var(--ink);
+  background: var(--accent-wash);
+  font-weight: 500;
+}
+.themes label:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.swatch {
+  width: 0.9rem;
+  height: 0.9rem;
+  flex: none;
+  border-radius: 50%;
+  border: 1px solid var(--ink-soft);
+  background: linear-gradient(135deg, var(--paper) 50%, var(--accent) 50%);
+}
+.swatch.auto {
+  background: linear-gradient(135deg, #eef3f1 50%, #0e171d 50%);
+}
+
 h1 {
   margin: 0;
   font-size: var(--step-3);
@@ -103,7 +229,7 @@ h1 {
   background: var(--ink-soft);
   animation: pulse 1.2s ease-in-out infinite;
 }
-.engine[data-kind="ready"]::before { background: #2f9e6a; animation: none; }
+.engine[data-kind="ready"]::before { background: var(--ok); animation: none; }
 .engine[data-kind="error"] { color: var(--danger); }
 .engine[data-kind="error"]::before { background: var(--danger); animation: none; }
 
@@ -248,7 +374,7 @@ select.col-select { font-family: var(--mono); font-size: 0.875rem; }
   margin-top: 0.75rem;
   font: inherit;
   font-weight: 500;
-  color: #fff;
+  color: var(--on-accent);
   background: var(--accent);
   border: 0;
   border-radius: 4px;
@@ -256,10 +382,22 @@ select.col-select { font-family: var(--mono); font-size: 0.875rem; }
   text-align: center;
   cursor: pointer;
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .primary { color: #0e171d; }
-}
 .primary:disabled { opacity: 0.6; cursor: progress; }
+
+.secondary {
+  width: 100%;
+  margin-top: 0.75rem;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--accent);
+  background: transparent;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 0.45rem 1rem;
+  cursor: pointer;
+}
+.secondary:hover { background: var(--accent-wash); }
 
 /* -------------------------------------------------------------- stage */
 
@@ -391,6 +529,18 @@ th {
   .plot { height: 420px; }
   .stage, .empty { min-height: 380px; }
   h1 { font-size: 2rem; }
+}
+
+/* Narrow phones: swatches only, the names stay for screen readers */
+@media (max-width: 480px) {
+  .themes label { padding: 0.4rem 0.55rem; }
+  .theme-name {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

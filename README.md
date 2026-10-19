@@ -12,6 +12,7 @@ EC-Lab's `.mpr` files are binary, so getting the data into Python, Excel or Orig
 
 - **Private by design.** The file is read by Python running inside your browser ([Pyodide](https://pyodide.org)). Nothing is uploaded, and there is no server.
 - **Cycle aware.** Split by cycle number, full cycle, half cycle (charge/discharge) or technique sequence. Plot any subset and export one file per cycle.
+- **Day or night.** Four color themes (Day, Sepia, Dusk, Night) or Auto, which follows your system. The plot follows the theme too.
 - **No sign-up, no install.** A static site on Vercel.
 
 ## How it works
