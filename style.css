@@ -1,0 +1,399 @@
+/* MPR Converter - lab-notebook graph paper, ink-blue pen. */
+
+:root {
+  --paper: #eef3f1;        /* engineering paper */
+  --grid: #dde7e2;         /* minor grid line */
+  --grid-major: #c9d8d0;   /* major grid line, also plot gridlines */
+  --surface: #fbfdfc;      /* plot face, panel */
+  --ink: #17233a;          /* fountain-pen blue-black */
+  --ink-soft: #5a6878;
+  --accent: #2a49c9;       /* cobalt ink: actions and single traces */
+  --accent-wash: #e3e9fb;
+  --danger: #a3271f;
+  --ramp-start: #9bb4f5;   /* first cycle */
+  --ramp-end: #0f1f66;     /* last cycle */
+
+  --sans: "Schibsted Grotesk", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, monospace;
+  --step--1: 0.8125rem;
+  --step-0: 1rem;
+  --step-1: 1.25rem;
+  --step-3: 2.441rem;
+  --radius: 6px;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0e171d;
+    --grid: #15222a;
+    --grid-major: #213239;
+    --surface: #121e25;
+    --ink: #e2eaee;
+    --ink-soft: #93a4ae;
+    --accent: #8ea5ff;
+    --accent-wash: #1c2a52;
+    --danger: #ff8a7f;
+    --ramp-start: #3f5bb8;
+    --ramp-end: #c9d6ff;
+    color-scheme: dark;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: var(--sans);
+  font-size: var(--step-0);
+  line-height: 1.5;
+  color: var(--ink);
+  background-color: var(--paper);
+  /* 5 mm notebook grid with a heavier line every 5 squares */
+  background-image:
+    linear-gradient(var(--grid-major) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-major) 1px, transparent 1px),
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 100px 100px, 100px 100px, 20px 20px, 20px 20px;
+}
+
+code { font-family: var(--mono); font-size: 0.9em; }
+a { color: var(--accent); }
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ----------------------------------------------------------- masthead */
+
+.masthead {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2.5rem 1rem 1.25rem;
+}
+
+h1 {
+  margin: 0;
+  font-size: var(--step-3);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.lede {
+  max-width: 62ch;
+  margin: 0.5rem 0 0;
+  color: var(--ink-soft);
+}
+
+.engine {
+  margin: 0.75rem 0 0;
+  font-size: var(--step--1);
+  color: var(--ink-soft);
+}
+.engine::before {
+  content: "";
+  display: inline-block;
+  width: 0.55rem;
+  height: 0.55rem;
+  margin-right: 0.45rem;
+  border-radius: 50%;
+  background: var(--ink-soft);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+.engine[data-kind="ready"]::before { background: #2f9e6a; animation: none; }
+.engine[data-kind="error"] { color: var(--danger); }
+.engine[data-kind="error"]::before { background: var(--danger); animation: none; }
+
+@keyframes pulse { 50% { opacity: 0.25; } }
+
+/* ---------------------------------------------------------- workspace */
+
+.workspace {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 1rem 2rem;
+  display: grid;
+  grid-template-columns: 290px minmax(0, 1fr);
+  grid-template-areas:
+    "panel stage"
+    "panel preview";
+  grid-template-rows: auto 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+.panel { grid-area: panel; }
+.stage { grid-area: stage; }
+.preview { grid-area: preview; }
+
+/* Before a file is open, the stage takes the full width */
+.panel[hidden] ~ .stage,
+.panel[hidden] ~ .preview { grid-column: 1 / -1; }
+
+/* -------------------------------------------------------------- panel */
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--grid-major);
+  border-radius: var(--radius);
+  padding: 0.25rem 1rem 1rem;
+  position: sticky;
+  top: 1rem;
+}
+
+.panel section { padding: 0.9rem 0; }
+.panel section + section { border-top: 1px solid var(--grid-major); }
+
+h2 {
+  margin: 0 0 0.6rem;
+  font-size: var(--step-0);
+  font-weight: 700;
+}
+
+.file-name {
+  margin: 0;
+  font-family: var(--mono);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.file-meta, .technique, .hint {
+  margin: 0.2rem 0 0;
+  font-size: var(--step--1);
+  color: var(--ink-soft);
+}
+.technique strong { color: var(--ink); font-weight: 500; }
+.hint:empty { display: none; }
+
+.field {
+  display: grid;
+  gap: 0.25rem;
+  margin-bottom: 0.6rem;
+  font-size: var(--step--1);
+  color: var(--ink-soft);
+}
+
+select {
+  width: 100%;
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--grid-major);
+  border-radius: 4px;
+  padding: 0.4rem 0.5rem;
+}
+
+select.col-select { font-family: var(--mono); font-size: 0.875rem; }
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+  margin: 0.3rem 0;
+}
+.check input { accent-color: var(--accent); margin: 0; }
+.check input:disabled + span { color: var(--ink-soft); }
+
+.link-btn {
+  font: inherit;
+  font-size: var(--step--1);
+  color: var(--accent);
+  background: none;
+  border: 0;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+/* Cycle chips: pressed = included in plot and export */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  max-height: 9.5rem;
+  overflow-y: auto;
+}
+.chip {
+  min-width: 2.4rem;
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  background: transparent;
+  border: 1px dashed var(--grid-major);
+  border-radius: 999px;
+  padding: 0.2rem 0.6rem;
+  cursor: pointer;
+}
+.chip[aria-pressed="true"] {
+  color: var(--accent);
+  background: var(--accent-wash);
+  border: 1px solid var(--accent);
+}
+.chip-actions { display: flex; gap: 1rem; margin-top: 0.5rem; }
+.chip-actions[hidden] { display: none; }
+
+.columns summary { cursor: pointer; font-size: 0.9rem; margin: 0.5rem 0; }
+.columns summary span { color: var(--ink-soft); }
+.col-actions { display: flex; gap: 1rem; margin-bottom: 0.3rem; }
+.col-list { max-height: 12rem; overflow-y: auto; }
+.col-list code { font-size: 0.8rem; }
+
+.primary {
+  display: inline-block;
+  width: 100%;
+  margin-top: 0.75rem;
+  font: inherit;
+  font-weight: 500;
+  color: #fff;
+  background: var(--accent);
+  border: 0;
+  border-radius: 4px;
+  padding: 0.6rem 1rem;
+  text-align: center;
+  cursor: pointer;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .primary { color: #0e171d; }
+}
+.primary:disabled { opacity: 0.6; cursor: progress; }
+
+/* -------------------------------------------------------------- stage */
+
+.stage {
+  position: relative;
+  min-height: 520px;
+  background: var(--surface);
+  border: 1px solid var(--grid-major);
+  border-radius: var(--radius);
+}
+
+.plot { height: 560px; padding: 0.5rem; }
+
+.empty {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  min-height: 520px;
+  padding: 2rem 1rem;
+  text-align: center;
+}
+.empty[hidden] { display: none; }
+
+.sketch { width: min(420px, 90%); height: auto; }
+.sketch .axis { stroke: var(--grid-major); stroke-width: 1.5; }
+.sketch .trace {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-dasharray: 900;
+  stroke-dashoffset: 900;
+  animation: draw 2.4s ease-out 0.3s forwards;
+}
+@keyframes draw { to { stroke-dashoffset: 0; } }
+
+.drop-title {
+  margin: 1rem 0 0;
+  font-size: var(--step-1);
+  font-weight: 700;
+}
+.empty-actions { width: 220px; }
+.file-btn { margin-top: 1rem; }
+.samples {
+  margin: 1.25rem 0 0;
+  max-width: 52ch;
+  font-size: 0.9rem;
+  color: var(--ink-soft);
+}
+.samples .link-btn { font-size: inherit; }
+
+.error {
+  max-width: 60ch;
+  margin: 1rem 0 0;
+  color: var(--danger);
+  font-size: 0.9rem;
+}
+
+.drop-veil {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 3px dashed var(--accent);
+  pointer-events: none;
+  z-index: 10;
+}
+.drop-veil[hidden] { display: none; }
+.drop-veil p {
+  margin: 0;
+  padding: 0.75rem 1.5rem;
+  font-size: var(--step-1);
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--surface);
+  border-radius: var(--radius);
+}
+
+/* ------------------------------------------------------------ preview */
+
+.preview {
+  background: var(--surface);
+  border: 1px solid var(--grid-major);
+  border-radius: var(--radius);
+  padding: 0.6rem 1rem;
+}
+.preview summary { cursor: pointer; font-weight: 500; }
+.table-wrap { overflow: auto; max-height: 360px; margin-top: 0.6rem; }
+table {
+  border-collapse: collapse;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+th, td {
+  padding: 0.25rem 0.75rem;
+  text-align: right;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--grid);
+}
+th {
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  font-weight: 500;
+  border-bottom: 1px solid var(--grid-major);
+}
+
+/* ----------------------------------------------------------- colophon */
+
+.colophon {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 1rem 2rem;
+  font-size: var(--step--1);
+  color: var(--ink-soft);
+}
+.colophon p { max-width: 80ch; margin: 0; }
+
+/* ------------------------------------------------------------- mobile */
+
+@media (max-width: 820px) {
+  .workspace {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "stage" "panel" "preview";
+  }
+  .panel { position: static; }
+  .plot { height: 420px; }
+  .stage, .empty { min-height: 380px; }
+  h1 { font-size: 2rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sketch .trace { animation: none; stroke-dashoffset: 0; }
+  .engine::before { animation: none; }
+}

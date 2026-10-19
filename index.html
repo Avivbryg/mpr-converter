@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MPR Converter</title>
+  <meta name="description" content="Open BioLogic EC-Lab .mpr files in the browser, plot them by cycle and export CSV, TXT or Excel. Files never leave your computer.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M4 22c4 0 5-12 10-12s5 8 8 8 4-6 6-8' fill='none' stroke='%232A49C9' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+</head>
+<body>
+  <header class="masthead">
+    <h1>MPR Converter</h1>
+    <p class="lede">Open a BioLogic EC-Lab <code>.mpr</code> file, pick the cycles you want and export them as CSV, TXT or Excel.
+      Everything runs in your browser; the file is never uploaded.</p>
+    <p id="engine" class="engine" role="status" aria-live="polite">Starting the Python engine…</p>
+  </header>
+
+  <main class="workspace">
+    <aside class="panel" id="panel" aria-label="Plot and export settings" hidden>
+      <section class="file-card">
+        <p class="file-name" id="file-name"></p>
+        <p class="file-meta" id="file-meta"></p>
+        <p class="technique">Looks like: <strong id="technique"></strong></p>
+      </section>
+
+      <section>
+        <h2>Axes</h2>
+        <label class="field">X axis
+          <select id="x-col" class="col-select"></select>
+        </label>
+        <label class="field">Y axis
+          <select id="y-col" class="col-select"></select>
+        </label>
+        <button type="button" class="link-btn" id="swap">Swap X and Y</button>
+      </section>
+
+      <section>
+        <h2>Cycles</h2>
+        <label class="field">Split data by
+          <select id="group-col"></select>
+        </label>
+        <div class="chips" id="chips" role="group" aria-label="Select cycles"></div>
+        <div class="chip-actions" id="chip-actions">
+          <button type="button" class="link-btn" id="select-all">Select all</button>
+          <button type="button" class="link-btn" id="select-none">Clear</button>
+        </div>
+        <p class="hint" id="chip-hint"></p>
+      </section>
+
+      <section class="export">
+        <h2>Export</h2>
+        <label class="field">Format
+          <select id="format">
+            <option value="csv">CSV (comma separated)</option>
+            <option value="tsv">TXT (tab separated, for Origin)</option>
+            <option value="xlsx">Excel workbook (.xlsx)</option>
+          </select>
+        </label>
+        <label class="check">
+          <input type="checkbox" id="split"> <span id="split-label">One file per cycle</span>
+        </label>
+        <details class="columns">
+          <summary>Columns <span id="col-count"></span></summary>
+          <div class="col-actions">
+            <button type="button" class="link-btn" id="cols-all">All</button>
+            <button type="button" class="link-btn" id="cols-plot">Only the plotted two</button>
+          </div>
+          <div id="col-list" class="col-list"></div>
+        </details>
+        <button type="button" class="primary" id="download">Download</button>
+        <p class="hint" id="export-hint"></p>
+      </section>
+    </aside>
+
+    <section class="stage" id="stage" aria-label="Plot">
+      <div class="empty" id="empty">
+        <svg class="sketch" viewBox="0 0 400 240" aria-hidden="true">
+          <line x1="40" y1="120" x2="380" y2="120" class="axis"/>
+          <line x1="210" y1="20" x2="210" y2="220" class="axis"/>
+          <path class="trace" d="M50 128 C 120 126, 170 122, 215 110 S 285 40, 320 60 S 360 112, 372 116
+                                  C 330 118, 300 122, 260 140 S 190 205, 150 185 S 80 132, 50 128 Z"/>
+        </svg>
+        <p class="drop-title">Drop an <code>.mpr</code> file here</p>
+        <div class="empty-actions">
+          <label class="primary file-btn">
+            Choose a file
+            <input type="file" id="file-input" accept=".mpr" hidden>
+          </label>
+        </div>
+        <p class="samples">No file at hand? Try a sample:
+          <button type="button" class="link-btn" data-sample="CV_C01.mpr">cyclic voltammetry</button>,
+          <button type="button" class="link-btn" data-sample="020-formation_CB5.mpr">battery cycling</button>,
+          <button type="button" class="link-btn" data-sample="121_CA_455nm_6V_30min_C01.mpr">chronoamperometry</button>
+        </p>
+        <p class="error" id="error" role="alert" hidden></p>
+      </div>
+      <div class="plot" id="plot" hidden></div>
+      <div class="drop-veil" id="veil" hidden><p>Drop to open</p></div>
+    </section>
+
+    <details class="preview" id="preview" hidden>
+      <summary>Data preview (first 50 rows)</summary>
+      <div class="table-wrap"><table id="table"></table></div>
+    </details>
+  </main>
+
+  <footer class="colophon">
+    <p>Reads files with <a href="https://github.com/echemdata/galvani">galvani</a> running on
+      <a href="https://pyodide.org">Pyodide</a>. Technique detection is a best guess from the columns in the file.
+      The <a href="https://github.com/" id="repo-link">source code</a> is open under GPL-3.0.</p>
+  </footer>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.35.3/plotly.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" defer></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
