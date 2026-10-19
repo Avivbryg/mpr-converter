@@ -1,27 +1,31 @@
 // folder.js - auto-convert a folder: every .mpr under the source folder
-// (subfolders included) is converted into the destination folder, mirroring
-// the subfolders. Uses the File System Access API (Chrome / Edge on desktop).
-// The conversion itself is core.convert() in the worker.
+// (subfolders included) is converted into the output folder, mirroring the
+// subfolders. The output folder is "converted" inside the source unless the
+// user picks another one. Uses the File System Access API (Chrome / Edge on
+// desktop). The conversion itself is core.convert() in the worker.
 //
-// A file counts as done when its output exists and is newer than the .mpr,
-// so nothing has to be remembered between visits, and a file EC-Lab keeps
-// writing to is converted again after it changes.
+// What the converter wrote is listed in a manifest (.mpr-converter.json) in
+// the output folder. A file that already exists but isn't in the manifest is
+// never overwritten. A source counts as done when the manifest has it with
+// the same size, modification time and settings, and its outputs still exist.
 
 import { call, waitForEngine, buildXlsx, friendlyError } from "./app.js";
 
 const $ = (id) => document.getElementById(id);
 const POLL_MS = 5000;
 const SETTLE_MS = 10000; // changed more recently than this: EC-Lab may still be writing it
+const OUT_DIR = "converted";
+const MANIFEST = ".mpr-converter.json";
 const EXT = { csv: "csv", tsv: "txt", xlsx: "xlsx" };
 const LOG_MAX = 100;
 
 const auto = {
   src: null,          // FileSystemDirectoryHandle
-  dst: null,
+  dst: null,          // only used when the output is not inside the source
   timer: null,        // set while watching
   scanning: false,
   logged: new Map(),  // relative path -> what was last logged for it, so the log doesn't repeat
-  failed: new Map(),  // relative path -> version that failed, not retried until the file changes
+  memo: new Map(),    // relative path -> {key, kind}: running / skipped / error, not retried until the file changes
 };
 
 // -------------------------------------------------------------- settings ---
@@ -43,11 +47,12 @@ function kv(mode, fn) {
 const kvGet = (key) => kv("readonly", (s) => s.get(key)).catch(() => undefined);
 const kvSet = (key, value) => kv("readwrite", (s) => s.put(value, key)).catch(() => {});
 
+const DEFAULTS = { format: "csv", split: false, inside: true, running: false };
 function loadSettings() {
   try {
-    return { format: "csv", split: false, same: true, ...JSON.parse(localStorage.getItem("auto") || "{}") };
+    return { ...DEFAULTS, ...JSON.parse(localStorage.getItem("auto") || "{}") };
   } catch {
-    return { format: "csv", split: false, same: true };
+    return { ...DEFAULTS };
   }
 }
 function saveSettings() {
@@ -55,25 +60,33 @@ function saveSettings() {
     localStorage.setItem("auto", JSON.stringify(settings()));
   } catch {}
 }
-const settings = () => ({ format: $("auto-format").value, split: $("auto-split").checked, same: $("auto-same").checked });
-const target = () => ($("auto-same").checked ? auto.src : auto.dst);
+const settings = () => ({
+  format: $("auto-format").value,
+  split: $("auto-split").checked,
+  inside: $("auto-inside").checked,
+  running: $("auto-running").checked,
+});
+
+// The output folder; "converted" inside the source is created on first use.
+async function outputRoot() {
+  return settings().inside ? auto.src.getDirectoryHandle(OUT_DIR, { create: true }) : auto.dst;
+}
 
 // -------------------------------------------------------------------- UI ---
 
 function render() {
-  const same = $("auto-same").checked;
+  const { inside, format, split } = settings();
   $("auto-src-name").textContent = auto.src ? auto.src.name : "not chosen";
-  $("auto-dst").disabled = same;
-  $("auto-dst-name").textContent = same
-    ? `same as source${auto.src ? ` (${auto.src.name})` : ""}`
+  $("auto-dst").hidden = inside;
+  $("auto-dst-name").textContent = inside
+    ? `${auto.src ? auto.src.name : "source"}/${OUT_DIR}`
     : auto.dst ? auto.dst.name : "not chosen";
 
-  const ready = Boolean(auto.src && target());
+  const ready = Boolean(auto.src && (inside || auto.dst));
   $("auto-toggle").disabled = !ready;
   $("auto-check").disabled = !ready;
   $("auto-toggle").textContent = auto.timer ? "Stop watching" : "Start watching";
 
-  const { format, split } = settings();
   const ext = EXT[format];
   $("auto-split-hint").textContent =
     !split ? `Each file becomes name.${ext}.`
@@ -111,8 +124,7 @@ async function permitted(handle, mode) {
 
 // Called from a button click, so the browser may show its permission prompt.
 async function ensureAccess() {
-  const same = $("auto-same").checked;
-  const ok = same
+  const ok = settings().inside
     ? await permitted(auto.src, "readwrite")
     : (await permitted(auto.src, "read")) && (await permitted(auto.dst, "readwrite"));
   if (!ok) status("The browser was not given access to the folder.", "error");
@@ -120,7 +132,7 @@ async function ensureAccess() {
 }
 
 async function pick(which) {
-  const writable = which === "dst" || $("auto-same").checked;
+  const writable = which === "dst" || settings().inside;
   let handle;
   try {
     handle = await window.showDirectoryPicker({ id: `mpr-${which}`, mode: writable ? "readwrite" : "read" });
@@ -130,10 +142,10 @@ async function pick(which) {
   stop();
   auto[which] = handle;
   auto.logged.clear();
-  auto.failed.clear();
+  auto.memo.clear();
   kvSet(which, handle);
   render();
-  status(`${which === "src" ? "Source" : "Destination"} folder set. Start watching or check now.`);
+  status(`${which === "src" ? "Source" : "Output"} folder set. Start watching or check now.`);
 }
 
 // --------------------------------------------------------------- watching ---
@@ -154,25 +166,30 @@ function stop() {
 }
 
 async function checkNow() {
-  if (await ensureAccess()) scan();
+  if (!(await ensureAccess())) return;
+  auto.memo.clear(); // retry skipped and failed files, e.g. after a clash was cleared up
+  scan();
 }
 
 async function scan() {
   if (auto.scanning) return;
   auto.scanning = true;
   status("Checking for new files…", "busy");
-  const counts = { total: 0, converted: 0, current: 0, waiting: 0, error: 0 };
+  const counts = { total: 0, converted: 0, current: 0, waiting: 0, running: 0, skipped: 0, error: 0 };
   try {
     await waitForEngine();
-    const out = target();
-    for await (const item of walk(auto.src, [])) {
+    const out = await outputRoot();
+    const manifest = await readManifest(out);
+    for await (const item of walk(auto.src, [], out)) {
       counts.total++;
-      counts[await consider(item, out)]++;
+      counts[await consider(item, out, manifest)]++;
     }
     const parts = [`${counts.total} .mpr file${counts.total === 1 ? "" : "s"}`];
     if (counts.converted) parts.push(`${counts.converted} converted now`);
     if (counts.current) parts.push(`${counts.current} already up to date`);
+    if (counts.running) parts.push(`${counts.running} experiment${counts.running === 1 ? "" : "s"} still running`);
     if (counts.waiting) parts.push(`${counts.waiting} still being written`);
+    if (counts.skipped) parts.push(`${counts.skipped} skipped (output already exists)`);
     if (counts.error) parts.push(`${counts.error} could not be read`);
     const when = new Date().toLocaleTimeString();
     status(`${auto.timer ? "Watching." : "Checked."} Last check ${when}: ${parts.join(", ")}.`, auto.timer ? "ready" : "idle");
@@ -184,17 +201,25 @@ async function scan() {
   }
 }
 
-async function* walk(dir, dirs) {
+// Every .mpr under dir. Skips the output folder if it sits inside the source,
+// and any other folder this tool wrote to (it has a manifest), e.g. the
+// "converted" folder after switching to another output folder.
+async function* walk(dir, dirs, out) {
   for await (const [name, handle] of dir.entries()) {
-    if (handle.kind === "directory") yield* walk(handle, [...dirs, name]);
-    else if (/\.mpr$/i.test(name)) yield { dirs, name, handle };
+    if (handle.kind === "directory") {
+      if (!(await handle.isSameEntry(out)) && !(await exists(handle, MANIFEST))) {
+        yield* walk(handle, [...dirs, name], out);
+      }
+    } else if (/\.mpr$/i.test(name)) {
+      yield { dirs, name, handle };
+    }
   }
 }
 
 // Convert one file if needed. Returns which count it belongs to.
-async function consider({ dirs, name, handle }, out) {
+async function consider({ dirs, name, handle }, out, manifest) {
   const rel = [...dirs, name].join("/");
-  const { format, split } = settings();
+  const { format, split, running } = settings();
   const base = name.replace(/\.mpr$/i, "");
 
   let file;
@@ -204,78 +229,116 @@ async function consider({ dirs, name, handle }, out) {
     log(rel, "waiting", "in use by another program, will try again");
     return "waiting";
   }
+  // second safeguard next to the LOG-module check: don't read a file mid-write
   if (Date.now() - file.lastModified < SETTLE_MS) {
     log(rel, "waiting", "still being written, will convert when it stops changing");
     return "waiting";
   }
 
-  const version = `${file.lastModified}|${file.size}|${format}|${split}`;
-  const folder = await subfolder(out, dirs, false);
-  if (folder && (await upToDate(folder, output(base, format, split), file.lastModified))) return "current";
-  if (auto.failed.get(rel) === version) return "error";
-
-  try {
-    const files = await call("convert", { bytes: await file.arrayBuffer(), name, format, split });
-    const written = await write(await subfolder(out, dirs, true), base, files, format, split);
-    auto.failed.delete(rel);
-    log(rel, "done", `→ ${[...dirs, written].join("/")}`, `done|${version}`);
-    return "converted";
-  } catch (err) {
-    auto.failed.set(rel, version);
-    log(rel, "error", friendlyError(err.message, name), `error|${version}`);
-    return "error";
+  const done = manifest.sources[rel];
+  if (done && done.modified === file.lastModified && done.size === file.size
+      && done.format === format && done.split === split && (await allExist(out, done.outputs))) {
+    return "current";
   }
-}
+  const key = `${file.lastModified}|${file.size}|${format}|${split}|${running}`;
+  const memo = auto.memo.get(rel);
+  if (memo && memo.key === key) return memo.kind;
+  const remember = (kind) => (auto.memo.set(rel, { key, kind }), kind);
 
-// What a converted file is called. Split output gets its own name, so
-// switching the setting writes new files instead of overwriting.
-function output(base, format, split) {
-  if (!split) return { file: `${base}.${EXT[format]}` };
-  return format === "xlsx" ? { file: `${base}_cycles.xlsx` } : { dir: `${base}_cycles` };
-}
-
-async function upToDate(folder, out, mtime) {
+  let result;
   try {
-    if (out.file) return (await (await folder.getFileHandle(out.file)).getFile()).lastModified >= mtime;
-    const dir = await folder.getDirectoryHandle(out.dir);
-    for await (const h of dir.values()) {
-      if (h.kind === "file" && (await h.getFile()).lastModified >= mtime) return true;
+    result = await call("convert", { bytes: await file.arrayBuffer(), name, format, split, includeRunning: running });
+  } catch (err) {
+    log(rel, "error", friendlyError(err.message, name), `error|${key}`);
+    return remember("error");
+  }
+  if (!result.files.length) {
+    log(rel, "running", "experiment running, will convert when it finishes");
+    return remember("running");
+  }
+
+  const planned = plan(dirs, base, result.files, format, split);
+  for (const p of planned) {
+    if (!manifest.written[p.path] && (await exists(out, p.path))) {
+      log(rel, "skipped", `skipped: ${p.path} already exists`, `skipped|${key}`);
+      return remember("skipped");
     }
-    return false;
-  } catch {
-    return false; // not there yet
   }
+
+  try {
+    for (const p of planned) await writeAt(out, p.path, p.data);
+  } catch (err) {
+    log(rel, "error", `could not write the output: ${err.message}`, `error|${key}`);
+    return remember("error");
+  }
+  manifest.sources[rel] = {
+    modified: file.lastModified,
+    size: file.size,
+    format,
+    split,
+    finished: result.finished,
+    end_date: result.end_date,
+    outputs: planned.map((p) => p.path),
+    converted: new Date().toISOString(),
+  };
+  for (const p of planned) manifest.written[p.path] = rel;
+  await saveManifest(out, manifest);
+  auto.memo.delete(rel);
+
+  const what = planned.length === 1 ? planned[0].path
+    : `${planned[0].path.replace(/\/[^/]*$/, "/")} (${planned.length} files)`;
+  const partial = result.finished ? "" : " (experiment still running: partial data)";
+  log(rel, "done", `→ ${what}${partial}`, `done|${key}`);
+  return "converted";
 }
 
-// The destination subfolder mirroring the source; null if it doesn't exist and create is false.
-async function subfolder(root, dirs, create) {
-  let dir = root;
+// The files to write for one source, as paths relative to the output folder.
+// Split output gets its own name, so switching the setting writes new files.
+function plan(dirs, base, files, format, split) {
+  const at = (...parts) => [...dirs, ...parts].join("/");
+  if (format === "xlsx") return [{ path: at(split ? `${base}_cycles.xlsx` : `${base}.xlsx`), data: buildXlsx(files) }];
+  if (!split) return [{ path: at(`${base}.${EXT[format]}`), data: files[0].text }];
+  return files.map((f) => ({ path: at(`${base}_cycles`, f.name), data: f.text }));
+}
+
+// ---------------------------------------------------------------- manifest ---
+
+async function readManifest(root) {
   try {
-    for (const d of dirs) dir = await dir.getDirectoryHandle(d, { create });
-  } catch (err) {
-    if (!create && err.name === "NotFoundError") return null;
-    throw err;
-  }
+    const m = JSON.parse(await (await (await root.getFileHandle(MANIFEST)).getFile()).text());
+    if (m && m.sources && m.written) return m;
+  } catch {}
+  // missing or unreadable: start empty, so every existing file counts as not ours
+  return { tool: "MPR Converter", version: 1, sources: {}, written: {} };
+}
+
+const saveManifest = (root, manifest) => writeAt(root, MANIFEST, JSON.stringify(manifest, null, 1));
+
+// ----------------------------------------------------------------- files ---
+
+async function folderOf(root, path, create) {
+  let dir = root;
+  for (const d of path.split("/").slice(0, -1)) dir = await dir.getDirectoryHandle(d, { create });
   return dir;
 }
 
-async function write(folder, base, files, format, split) {
-  const out = output(base, format, split);
-  if (format === "xlsx") {
-    await writeFile(folder, out.file, buildXlsx(files));
-    return out.file;
+async function exists(root, path) {
+  try {
+    await (await folderOf(root, path, false)).getFileHandle(path.split("/").at(-1));
+    return true;
+  } catch (err) {
+    return err.name !== "NotFoundError"; // e.g. a folder with that name: don't touch it either
   }
-  if (out.file) {
-    await writeFile(folder, out.file, files[0].text);
-    return out.file;
-  }
-  const dir = await folder.getDirectoryHandle(out.dir, { create: true });
-  for (const f of files) await writeFile(dir, f.name, f.text);
-  return `${out.dir}/ (${files.length} file${files.length === 1 ? "" : "s"})`;
 }
 
-async function writeFile(folder, name, data) {
-  const w = await (await folder.getFileHandle(name, { create: true })).createWritable();
+async function allExist(root, paths) {
+  for (const p of paths) if (!(await exists(root, p))) return false;
+  return true;
+}
+
+async function writeAt(root, path, data) {
+  const dir = await folderOf(root, path, true);
+  const w = await (await dir.getFileHandle(path.split("/").at(-1), { create: true })).createWritable();
   await w.write(data);
   await w.close();
 }
@@ -286,15 +349,16 @@ async function init() {
   const s = loadSettings();
   $("auto-format").value = s.format;
   $("auto-split").checked = s.split;
-  $("auto-same").checked = s.same;
+  $("auto-inside").checked = s.inside;
+  $("auto-running").checked = s.running;
 
   $("auto-src").addEventListener("click", () => pick("src"));
   $("auto-dst").addEventListener("click", () => pick("dst"));
   $("auto-toggle").addEventListener("click", () => (auto.timer ? stop() : start()));
   $("auto-check").addEventListener("click", checkNow);
-  for (const id of ["auto-format", "auto-split", "auto-same"]) {
+  for (const id of ["auto-format", "auto-split", "auto-inside", "auto-running"]) {
     $(id).addEventListener("change", () => {
-      if (id === "auto-same") stop();
+      if (id === "auto-inside") stop();
       saveSettings();
       render();
     });
@@ -307,7 +371,7 @@ async function init() {
   auto.src = (await kvGet("src")) || null;
   auto.dst = (await kvGet("dst")) || null;
   render();
-  status(auto.src && target()
+  status(auto.src && (s.inside || auto.dst)
     ? "Folders remembered from last time. Start watching to continue (the browser may ask to confirm access)."
     : "Choose a source folder to begin.");
 }

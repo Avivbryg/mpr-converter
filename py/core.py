@@ -74,6 +74,20 @@ def _read_mpr(path):
     return cols, mpr
 
 
+def _run_state(mpr):
+    """(finished, end_date) read from the file's modules.
+
+    EC-Lab appears to write the 'VMP LOG' module (galvani's mpr.enddate)
+    only when an experiment finishes; while it runs, galvani's comments say
+    the log lives in a separate .mpl file. So a file without the LOG module
+    is treated as a running experiment whose data is still partial.
+    Not yet checked against a file from a running experiment.
+    """
+    finished = any(m["shortname"].strip() == b"VMP LOG" for m in mpr.modules)
+    end = getattr(mpr, "enddate", None) if finished else None
+    return finished, (end.isoformat() if end else None)
+
+
 def guess_technique(names):
     """Best-effort guess of the technique from the column names.
 
@@ -136,7 +150,10 @@ def load(path, filename=None):
     _STATE.update(cols=cols, filename=filename)
 
     start = getattr(mpr, "startdate", None)
+    finished, end_date = _run_state(mpr)
     return {
+        "finished": finished,
+        "end_date": end_date,
         "filename": filename,
         "n_points": int(len(next(iter(cols.values())))),
         "columns": ordered,
@@ -238,17 +255,24 @@ def export(columns, group_col, selected, fmt="csv", split=False):
                   selected, fmt, split)
 
 
-def convert(path, filename=None, fmt="csv", split=False):
+def convert(path, filename=None, fmt="csv", split=False, include_running=True):
     """Convert a whole file in one go, for the folder auto-convert.
 
     All columns, split by the file's default cycle column. Does not touch
-    the file open in the viewer (_STATE). Returns the same list as export().
+    the file open in the viewer (_STATE).
+    Returns {"finished", "end_date", "files"}, where files is the same list
+    as export(). With include_running=False, a running experiment gives no
+    files.
     """
-    cols, _ = _read_mpr(path)
-    options = _group_options(cols)
-    group_col = options[0] if options else NO_GROUP
-    return _files(cols, filename or os.path.basename(path), _ordered(cols),
-                  group_col, [], fmt, split)
+    cols, mpr = _read_mpr(path)
+    finished, end_date = _run_state(mpr)
+    result = {"finished": finished, "end_date": end_date, "files": []}
+    if finished or include_running:
+        options = _group_options(cols)
+        group_col = options[0] if options else NO_GROUP
+        result["files"] = _files(cols, filename or os.path.basename(path),
+                                 _ordered(cols), group_col, [], fmt, split)
+    return result
 
 
 def _files(cols, filename, columns, group_col, selected, fmt, split):

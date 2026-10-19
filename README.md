@@ -12,7 +12,7 @@ EC-Lab's `.mpr` files are binary, so getting the data into Python, Excel or Orig
 
 - **Private by design.** The file is read by Python running inside your browser ([Pyodide](https://pyodide.org)). Nothing is uploaded, and there is no server.
 - **Cycle aware.** Split by cycle number, full cycle, half cycle (charge/discharge) or technique sequence. Plot any subset and export one file per cycle.
-- **Auto-convert a folder.** Pick a source and a destination folder (or the same one) and a format. Every `.mpr` in it, subfolders included, is converted, and new or updated files are picked up every few seconds while the tab is open. Needs Chrome or Edge on a computer.
+- **Auto-convert a folder.** Pick a source folder and a format. Every `.mpr` in it, subfolders included, is converted into a `converted` folder inside it (or another folder you pick), and new or updated files are picked up every few seconds while the tab is open. Experiments that are still running wait until they finish (optionally convert them as partial data). Files the converter didn't write are never overwritten; what it wrote is listed in `.mpr-converter.json`. Needs Chrome or Edge on a computer.
 - **Day or night.** Four color themes (Day, Sepia, Dusk, Night) or Auto, which follows your system. The plot follows the theme too.
 - **No sign-up, no install.** A static site on Vercel.
 

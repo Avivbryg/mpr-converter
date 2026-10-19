@@ -79,10 +79,10 @@ const commands = {
     return toJs(core.preview(50));
   },
 
-  convert({ bytes, name, format, split }) {
+  convert({ bytes, name, format, split, includeRunning }) {
     py.FS.writeFile(AUTO_PATH, new Uint8Array(bytes));
     const fmt = format === "xlsx" ? "csv" : format;
-    return toJs(core.convert(AUTO_PATH, name, fmt, split));
+    return toJs(core.convert(AUTO_PATH, name, fmt, split, includeRunning));
   },
 
   export({ columns, groupCol, selected, format, split }) {

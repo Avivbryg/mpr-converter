@@ -125,6 +125,7 @@ async function showFile() {
   const date = info.start_date ? `, recorded ${info.start_date}` : "";
   $("file-meta").textContent = `${info.n_points.toLocaleString()} points, ${info.columns.length} columns${date}`;
   $("technique").textContent = info.technique;
+  $("running").hidden = info.finished;
 
   fillSelect($("x-col"), info.columns, info.default_x);
   fillSelect($("y-col"), info.columns, info.default_y);

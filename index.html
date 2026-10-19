@@ -42,6 +42,7 @@
         <p class="file-name" id="file-name"></p>
         <p class="file-meta" id="file-meta"></p>
         <p class="technique">Looks like: <strong id="technique"></strong></p>
+        <p class="running" id="running" hidden>Experiment still running: data is partial.</p>
         <button type="button" class="secondary" id="open-another">Open another file…</button>
         <p class="hint">or drop an <code>.mpr</code> anywhere on this page</p>
       </section>
@@ -130,9 +131,10 @@
   <section class="auto" id="auto" aria-labelledby="auto-title">
     <div class="auto-intro">
       <h2 id="auto-title">Auto-convert a folder</h2>
-      <p class="hint">Pick the folder your <code>.mpr</code> files land in and where the converted files should go.
-        Subfolders are included and mirrored in the destination. While this tab is open, new and updated files
-        are converted every few seconds. Files never leave this computer.</p>
+      <p class="hint">Pick the folder your <code>.mpr</code> files land in. Subfolders are included and mirrored in the output.
+        While this tab is open, new and updated files are converted every few seconds; experiments that are still
+        running wait until they finish. Existing files the converter didn't write are never overwritten.
+        Files never leave this computer.</p>
     </div>
 
     <p class="auto-unsupported" id="auto-unsupported" hidden>Folder access needs Chrome or Edge on a computer.
@@ -146,10 +148,10 @@
           <code class="auto-path" id="auto-src-name">not chosen</code>
         </div>
         <div class="auto-folder">
-          <span class="auto-label">Destination folder</span>
-          <button type="button" class="secondary" id="auto-dst" disabled>Choose folder…</button>
-          <label class="check"><input type="checkbox" id="auto-same" checked> <span>Same as source</span></label>
-          <code class="auto-path" id="auto-dst-name">same as source</code>
+          <span class="auto-label">Output folder</span>
+          <label class="check"><input type="checkbox" id="auto-inside" checked> <span>A <code>converted</code> folder inside the source</span></label>
+          <button type="button" class="secondary" id="auto-dst" hidden>Choose folder…</button>
+          <code class="auto-path" id="auto-dst-name"></code>
         </div>
       </div>
 
@@ -163,6 +165,7 @@
         </label>
         <label class="check"><input type="checkbox" id="auto-split"> <span>One file per cycle</span></label>
         <p class="hint" id="auto-split-hint"></p>
+        <label class="check"><input type="checkbox" id="auto-running"> <span>Also convert running experiments (partial data)</span></label>
       </div>
 
       <div class="auto-actions">

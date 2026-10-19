@@ -68,7 +68,7 @@ def test_export_split_per_cycle():
 
 def test_convert_leaves_viewer_state_alone():
     core.load(sample("CV_C01.mpr"))
-    files = core.convert(sample("020-formation_CB5.mpr"), fmt="csv", split=True)
+    files = core.convert(sample("020-formation_CB5.mpr"), fmt="csv", split=True)["files"]
     assert [f["name"] for f in files] == [
         "020-formation_CB5_cycle-1.csv", "020-formation_CB5_cycle-2.csv"]
     assert core._STATE["filename"] == "CV_C01.mpr"   # viewer still has its file
@@ -76,7 +76,7 @@ def test_convert_leaves_viewer_state_alone():
 
 
 def test_convert_whole_file_without_cycles():
-    files = core.convert(sample("121_CA_455nm_6V_30min_C01.mpr"), fmt="tsv")
+    files = core.convert(sample("121_CA_455nm_6V_30min_C01.mpr"), fmt="tsv")["files"]
     assert [f["name"] for f in files] == ["121_CA_455nm_6V_30min_C01.txt"]
     assert len(files[0]["text"].splitlines()) - 1 == 1804
     # same column order as the viewer's export
@@ -84,6 +84,51 @@ def test_convert_whole_file_without_cycles():
     info = core.load(sample("121_CA_455nm_6V_30min_C01.mpr"))
     assert header == info["columns"]
     assert header[:3] == ["time/s", "Ewe/V", "I/mA"]
+
+
+def strip_log_module(src, dst):
+    """Copy an .mpr without its 'VMP LOG' module, like a running experiment."""
+    from galvani.BioLogic import MPR_MAGIC, read_VMP_modules
+
+    with open(src, "rb") as f:
+        data = f.read()
+        f.seek(len(MPR_MAGIC))
+        modules = list(read_VMP_modules(f, read_module_data=False))
+    out, start = data[:len(MPR_MAGIC)], len(MPR_MAGIC)
+    for m in modules:
+        end = m["offset"] + m["length"]   # module = magic + header + data
+        if m["shortname"].strip() != b"VMP LOG":
+            out += data[start:end]
+        start = end
+    with open(dst, "wb") as f:
+        f.write(out)
+    return dst
+
+
+def test_samples_are_finished_experiments():
+    for name, end in [("CV_C01.mpr", "2013-11-05"),
+                      ("020-formation_CB5.mpr", "2022-05-29"),
+                      ("121_CA_455nm_6V_30min_C01.mpr", "2013-12-12")]:
+        info = core.load(sample(name))
+        assert info["finished"] is True
+        assert info["end_date"] == end
+        assert core.convert(sample(name))["finished"] is True
+
+
+def test_running_experiment_without_log_module(tmp_path):
+    path = strip_log_module(sample("CV_C01.mpr"), str(tmp_path / "running.mpr"))
+    assert os.path.getsize(path) < os.path.getsize(sample("CV_C01.mpr"))
+
+    info = core.load(path)
+    assert info["finished"] is False
+    assert info["end_date"] is None
+    assert info["n_points"] == 12246          # the data itself still reads fine
+
+    skipped = core.convert(path, include_running=False)
+    assert skipped == {"finished": False, "end_date": None, "files": []}
+    partial = core.convert(path, fmt="csv", include_running=True)
+    assert partial["finished"] is False
+    assert [f["name"] for f in partial["files"]] == ["running.csv"]
 
 
 def test_series_downsampling():

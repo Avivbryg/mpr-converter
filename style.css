@@ -290,6 +290,18 @@ h2 {
   color: var(--ink-soft);
 }
 .technique strong { color: var(--ink); font-weight: 500; }
+.running {
+  margin: 0.5rem 0 0;
+  padding: 0.35rem 0.6rem;
+  font-size: var(--step--1);
+  font-weight: 500;
+  color: var(--ink);
+  background: var(--accent-wash);
+  border-left: 3px solid var(--accent);
+  border-radius: 4px;
+}
+.running::before { content: "⏳ "; }
+.running[hidden] { display: none; }
 .hint:empty { display: none; }
 
 .field {
@@ -544,6 +556,7 @@ th {
   color: var(--ink-soft);
 }
 .auto-folder .secondary { width: auto; margin: 0; }
+.auto-folder .secondary[hidden] { display: none; }
 .auto-folder .check { margin: 0; }
 .auto-path {
   flex-basis: 100%;
@@ -589,6 +602,8 @@ th {
 .auto-log span { color: var(--ink-soft); }
 .auto-log [data-kind="done"] code::before { content: "✓ "; color: var(--ok); }
 .auto-log [data-kind="waiting"] code::before { content: "… "; color: var(--ink-soft); }
+.auto-log [data-kind="running"] code::before { content: "⏳ "; }
+.auto-log [data-kind="skipped"] code::before { content: "⤼ "; color: var(--accent); }
 .auto-log [data-kind="error"] code::before { content: "✕ "; color: var(--danger); }
 .auto-log [data-kind="error"] span { color: var(--danger); }
 
