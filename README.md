@@ -54,3 +54,5 @@ Tested with cyclic voltammetry, galvanostatic cycling (GCPL) and chronoamperomet
 - `.mpr` parsing: [galvani](https://github.com/echemdata/galvani) by Christopher Kerr and contributors, GPL-3.0-or-later. A copy of `galvani/BioLogic.py` is included in `py/galvani/`.
 - Sample files in `samples/`: from the galvani test data, CC-BY-4.0 (see `samples/README.md`).
 - Because it includes galvani, this project is licensed under **GPL-3.0-or-later** (see `LICENSE`).
+
+This is an independent project, not affiliated with or endorsed by BioLogic. BioLogic and EC-Lab are trademarks of their respective owners.
